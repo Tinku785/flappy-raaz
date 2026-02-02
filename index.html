@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Flappy Face - Prank Game</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #1a1a2e;
+            --font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            font-family: var(--font-family);
+        }
+
+        #game-container {
+            position: relative;
+            width: 360px;
+            height: 640px;
+            max-width: 100vw;
+            max-height: 100vh;
+            aspect-ratio: 360 / 640;
+            box-shadow: 0 0 100px rgba(0, 0, 0, 0.5);
+            background-color: var(--bg-color);
+            overflow: hidden;
+            border-radius: 12px;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.5);
+            z-index: 10;
+        }
+
+        .score-display {
+            position: absolute;
+            top: 20px;
+            font-size: 3rem;
+            font-weight: 900;
+        }
+
+        .message {
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+            padding: 20px 40px;
+            border-radius: 20px;
+            text-align: center;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            animation: fadeIn 0.3s ease-out;
+            pointer-events: auto;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 2.5rem;
+        }
+
+        p {
+            margin: 10px 0 0;
+            font-size: 1.2rem;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.9);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        #mute-btn {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(5px);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            pointer-events: auto;
+            transition: all 0.2s;
+            z-index: 100;
+        }
+
+        #mute-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(1.1);
+        }
+
+        svg {
+            filter: drop-shadow(0 0 5px rgba(0, 0, 0, 0.5));
+        }
+    </style>
+</head>
+
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+
+        <div id="ui-layer">
+            <div id="score" class="score-display">0</div>
+
+            <div id="start-screen" class="message">
+                <h1>FLAPPY FACE</h1>
+                <p>Tap to Start</p>
+                <div id="start-high-score" style="font-size: 0.9rem; margin-top: 10px; opacity: 0.8;">Best: 0</div>
+                <small style="opacity: 0.7">(Space or Click)</small>
+            </div>
+
+            <div id="game-over-screen" class="message hidden">
+                <h1>GAME OVER</h1>
+                <p id="final-score">Score: 0</p>
+                <p id="high-score-display" style="font-size: 0.9rem; opacity: 0.8;">Best: 0</p>
+                <p style="margin-top: 15px;">Tap to Retry</p>
+            </div>
+
+            <button id="mute-btn" title="Toggle Music">
+                <svg id="mute-icon" viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                    <path
+                        d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const finalScoreEl = document.getElementById('final-score');
+        const highScoreEl = document.getElementById('high-score-display');
+        const startHighScoreEl = document.getElementById('start-high-score');
+        const muteBtn = document.getElementById('mute-btn');
+        const muteIcon = document.getElementById('mute-icon');
+
+        // GAME SETTINGS
+        let GRAVITY = 0.25;
+        let JUMP_FORCE = -5.5;
+        let PILLAR_SPEED = 2.5;
+        const PILLAR_SPACING = 210;
+        const PILLAR_WIDTH = 120;
+        const GAP_SIZE = 160;
+        const SPEED_INCREMENT = 0.05; // Gets faster every score!
+
+        // ASSET LOADING
+        const assets = {
+            faceNormal: new Image(),
+            faceJump: new Image(),
+            faceCrash: new Image(),
+            building: new Image(),
+            funnyBg: new Image(),
+            jumpSound: new Audio('jump.mpeg'),
+            crashSound: new Audio('crash.mpeg'),
+            bgMusic: new Audio('bgm.mp3') // Placeholder: Player can add their own bgm.mp3
+        };
+
+        assets.bgMusic.loop = true;
+        assets.bgMusic.volume = 0.4;
+
+        assets.faceNormal.src = 'face_normal.png';
+        assets.faceJump.src = 'face_jump.png';
+        assets.faceCrash.src = 'face_crash.png';
+        assets.building.src = 'building.png';
+        assets.funnyBg.src = 'funny_bg.png';
+
+        // GAME STATE
+        let gameState = 'START';
+        let score = 0;
+        let animationFrame;
+        let jumpStateTimer = null;
+        let bgOffset = 0;
+        let screenShake = 0;
+        let particles = [];
+        let trails = [];    // Motion trails
+        let floatingTexts = []; // "NICE", "EPIC"
+        let isMuted = false;
+        let highScore = Number(localStorage.getItem('flappyFaceBest')) || 0;
+
+        // BIRD OBJECT
+        const bird = {
+            x: 50,
+            y: 0,
+            width: 45,
+            height: 45,
+            velocity: 0,
+            rotation: 0,
+            scale: 1,
+            targetScale: 1,
+            squash: 1,
+            stretch: 1,
+            imageState: 'normal' // 'normal', 'jump', 'crash'
+        };
+
+        // PILLARS
+        let pillars = [];
+
+        function init() {
+            canvas.width = 360;
+            canvas.height = 640;
+            bird.y = canvas.height / 2;
+            bird.velocity = 0;
+            bird.rotation = 0;
+            bird.scale = 1;
+            bird.targetScale = 1;
+            bird.squash = 1;
+            bird.stretch = 1;
+            bird.imageState = 'normal';
+            score = 0;
+            PILLAR_SPEED = 2.5; // Reset speed
+            scoreEl.innerText = score;
+            pillars = [];
+            particles = [];
+            trails = [];
+            floatingTexts = [];
+            bgOffset = 0;
+            screenShake = 0;
+
+            // Update High Score Display
+            startHighScoreEl.innerText = 'Best: ' + highScore;
+            highScoreEl.innerText = 'Best: ' + highScore;
+
+            addPillar();
+        }
+
+        class FloatingText {
+            constructor(x, y, text) {
+                this.x = x;
+                this.y = y;
+                this.text = text;
+                this.life = 1.0;
+                this.vy = -1;
+            }
+            update() {
+                this.y += this.vy;
+                this.life -= 0.02;
+            }
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.life;
+                ctx.fillStyle = '#ff00ff';
+                ctx.font = 'bold 24px Outfit';
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = 'white';
+                ctx.fillText(this.text, this.x, this.y);
+                ctx.restore();
+            }
+        }
+
+        class Particle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.vx = Math.random() * 2 - 1;
+                this.vy = Math.random() * -3 - 1;
+                this.life = 1.0;
+                this.size = Math.random() * 4 + 2;
+            }
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.vy += 0.1; // Gravity
+                this.life -= 0.02;
+            }
+            draw() {
+                ctx.fillStyle = `rgba(255, 255, 255, ${this.life})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function addPillar() {
+            // Extreme height variation for more challenge
+            const minHeight = 40;
+            const maxHeight = canvas.height - GAP_SIZE - 40;
+            const topHeight = Math.floor(Math.random() * (maxHeight - minHeight + 1)) + minHeight;
+
+            pillars.push({
+                x: canvas.width,
+                top: topHeight,
+                passed: false
+            });
+        }
+
+        function jump() {
+            if (gameState === 'START') {
+                gameState = 'PLAYING';
+                startScreen.classList.add('hidden');
+                assets.bgMusic.play().catch(() => { });
+            }
+
+            if (gameState === 'PLAYING') {
+                bird.velocity = JUMP_FORCE;
+                bird.squash = 0.7; // Interactive Squash
+                bird.stretch = 1.3;
+
+                // Spawn "Sweat" particles
+                for (let i = 0; i < 5; i++) {
+                    particles.push(new Particle(bird.x + bird.width / 2, bird.y + bird.height / 2));
+                }
+
+                // Add to Trail
+                trails.push({ x: bird.x, y: bird.y, life: 1.0 });
+
+                assets.jumpSound.currentTime = 0;
+                assets.jumpSound.play().catch(() => { }); // Catch if browser blocks autoplay
+
+                // Funny Logic: Switch to jump face for 150ms
+                bird.imageState = 'jump';
+                if (jumpStateTimer) clearTimeout(jumpStateTimer);
+                jumpStateTimer = setTimeout(() => {
+                    if (gameState === 'PLAYING') bird.imageState = 'normal';
+                }, 150);
+            } else if (gameState === 'GAMEOVER' && bird.scale >= 7.5) { // Only restart after zoom is almost done
+                resetGame();
+            }
+        }
+
+        function resetGame() {
+            gameState = 'START';
+            gameOverScreen.classList.add('hidden');
+            startScreen.classList.remove('hidden');
+            init();
+        }
+
+        function gameOver() {
+            if (gameState === 'GAMEOVER') return;
+
+            gameState = 'GAMEOVER';
+            bird.imageState = 'crash';
+            bird.targetScale = 8; // Zoom right into the player's face!
+            screenShake = 25; // Massive shake
+            assets.crashSound.play().catch(() => { });
+
+            assets.bgMusic.pause();
+
+            // Save High Score
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('flappyFaceBest', highScore);
+            }
+            highScoreEl.innerText = 'Best: ' + highScore;
+
+            setTimeout(() => {
+                if ((gameState === 'GAMEOVER' || gameState === 'PLAYING') && !isMuted) {
+                    assets.bgMusic.play().catch(() => { });
+                }
+            }, 2500); // 2.5 seconds pause
+
+            finalScoreEl.innerText = 'Score: ' + score;
+            setTimeout(() => {
+                // Fix: Only show screen if we are still in GAMEOVER state
+                if (gameState === 'GAMEOVER') {
+                    gameOverScreen.classList.remove('hidden');
+                }
+            }, 800); // Wait for the zoom effect a bit
+        }
+
+        // Start BGM on first interaction ever
+        const startBGM = () => {
+            if (!isMuted) assets.bgMusic.play().catch(() => { });
+            window.removeEventListener('mousedown', startBGM);
+            window.removeEventListener('touchstart', startBGM);
+            window.removeEventListener('keydown', startBGM);
+        };
+        window.addEventListener('mousedown', startBGM);
+        window.addEventListener('touchstart', startBGM);
+        window.addEventListener('keydown', startBGM);
+
+        // Mute Toggle Logic
+        muteBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Don't trigger jump
+            isMuted = !isMuted;
+            if (isMuted) {
+                assets.bgMusic.pause();
+                muteIcon.innerHTML = '<path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.58.45-1.24.8-1.97 1.02v2.06c1.28-.3 2.4-.92 3.35-1.74l2.09 2.09L21 19.73 4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>';
+            } else {
+                assets.bgMusic.play().catch(() => { });
+                muteIcon.innerHTML = '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>';
+            }
+        });
+
+        muteBtn.addEventListener('touchstart', (e) => {
+            e.stopPropagation();
+        });
+
+        function update() {
+            if (gameState === 'START') {
+                bgOffset -= 0.5; // Slow scroll on start
+                return;
+            }
+
+            if (gameState === 'GAMEOVER') {
+                // Animate the zoom in
+                bird.scale += (bird.targetScale - bird.scale) * 0.1;
+                bird.rotation += 0.08;
+                if (screenShake > 0) screenShake *= 0.9;
+                return;
+            }
+
+            // Juice: Return bird to original shape
+            bird.squash += (1 - bird.squash) * 0.2;
+            bird.stretch += (1 - bird.stretch) * 0.2;
+
+            // Particles & Trails & Texts
+            particles.forEach((p, i) => { p.update(); if (p.life <= 0) particles.splice(i, 1); });
+            trails.forEach((t, i) => { t.life -= 0.05; if (t.life <= 0) trails.splice(i, 1); });
+            floatingTexts.forEach((ft, i) => { ft.update(); if (ft.life <= 0) floatingTexts.splice(i, 1); });
+
+            // Max scale for crash zoom so we can restart
+            if (gameState === 'GAMEOVER') {
+                bird.scale += (bird.targetScale - bird.scale) * 0.1;
+                bird.rotation += 0.08;
+                if (screenShake > 0) screenShake *= 0.9;
+                return;
+            }
+
+            // Juice: Return bird to original shape
+            bird.squash += (1 - bird.squash) * 0.2;
+            bird.stretch += (1 - bird.stretch) * 0.2;
+
+            // Physics
+            bird.velocity += GRAVITY;
+            bird.y += bird.velocity;
+            bgOffset -= PILLAR_SPEED * 0.5; // Sync scroll with speed
+
+            // Rotation Logic
+            const targetRotation = Math.min(Math.max(bird.velocity * 0.15, -0.6), 1.5);
+            bird.rotation += (targetRotation - bird.rotation) * 0.15;
+
+            // Pillar logic
+            pillars.forEach((pillar, index) => {
+                pillar.x -= PILLAR_SPEED;
+
+                // Collision detection
+                const birdHitbox = {
+                    left: bird.x + 8,
+                    right: bird.x + bird.width - 8,
+                    top: bird.y + 8,
+                    bottom: bird.y + bird.height - 8
+                };
+
+                // Check top pillar
+                if (birdHitbox.right > pillar.x &&
+                    birdHitbox.left < pillar.x + PILLAR_WIDTH &&
+                    (birdHitbox.top < pillar.top || birdHitbox.bottom > pillar.top + GAP_SIZE)) {
+                    gameOver();
+                }
+
+                // Point scoring
+                if (!pillar.passed && pillar.x + PILLAR_WIDTH < bird.x) {
+                    pillar.passed = true;
+                    score++;
+                    scoreEl.innerText = score;
+
+                    // Difficulty Ramp
+                    PILLAR_SPEED += SPEED_INCREMENT;
+
+                    // Creative Milestone Feedback
+                    if (score % 5 === 0) floatingTexts.push(new FloatingText(bird.x, bird.y, "EPIC!"));
+                    else if (score % 2 === 0) floatingTexts.push(new FloatingText(bird.x, bird.y, "NICE!"));
+
+                    // Point Flash
+                    screenShake = 3;
+                }
+            });
+
+            // Remove off-screen pillars
+            if (pillars.length > 0 && pillars[0].x + PILLAR_WIDTH < -50) {
+                pillars.shift();
+            }
+
+            // Spawn new pillars
+            const lastPillar = pillars[pillars.length - 1];
+            if (lastPillar.x < canvas.width - PILLAR_SPACING) {
+                addPillar();
+            }
+
+            // Ground/Ceiling collision
+            if (bird.y + bird.height > canvas.height || bird.y < -50) {
+                gameOver();
+            }
+        }
+
+        function draw() {
+            ctx.save();
+
+            // Screen Shake
+            if (screenShake > 0.1) {
+                ctx.translate(Math.random() * screenShake - screenShake / 2, Math.random() * screenShake - screenShake / 2);
+            }
+
+            // Draw Background (Scrolling)
+            if (assets.funnyBg.complete) {
+                let x = bgOffset % canvas.width;
+                ctx.drawImage(assets.funnyBg, x, 0, canvas.width, canvas.height);
+                ctx.drawImage(assets.funnyBg, x + canvas.width, 0, canvas.width, canvas.height);
+            } else {
+                ctx.fillStyle = '#70c5ce';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+
+            // Particles & Trails & Texts
+            trails.forEach(t => {
+                ctx.save();
+                ctx.globalAlpha = t.life * 0.3;
+                ctx.drawImage(assets.faceNormal, t.x, t.y, bird.width, bird.height);
+                ctx.restore();
+            });
+            particles.forEach(p => p.draw());
+            floatingTexts.forEach(ft => ft.draw());
+
+            // Draw Pillars
+            pillars.forEach(pillar => {
+                // Neon Glow Effect for Dubai towers
+                ctx.save();
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = 'rgba(255, 0, 255, 0.4)'; // Neon pink glow
+
+                // Realistic Dubai Top
+                ctx.save();
+                ctx.translate(pillar.x + PILLAR_WIDTH / 2, pillar.top);
+                ctx.scale(1, -1);
+                ctx.drawImage(assets.building, -PILLAR_WIDTH / 2, 0, PILLAR_WIDTH, pillar.top);
+                ctx.restore();
+
+                // Realistic Dubai Bottom
+                const bottomHeight = canvas.height - (pillar.top + GAP_SIZE);
+                ctx.drawImage(assets.building, pillar.x, pillar.top + GAP_SIZE, PILLAR_WIDTH, bottomHeight);
+                ctx.restore();
+            });
+
+            // Draw Bird
+            ctx.save();
+            // If Game Over, center the bird for the zoom effect
+            if (gameState === 'GAMEOVER') {
+                ctx.translate(canvas.width / 2, canvas.height / 2);
+            } else {
+                ctx.translate(bird.x + bird.width / 2, bird.y + bird.height / 2);
+            }
+
+            ctx.rotate(bird.rotation);
+            // Interactive Animations: Squash and Stretch
+            ctx.scale(bird.scale * bird.squash, bird.scale * bird.stretch);
+
+            let img = assets.faceNormal;
+            if (bird.imageState === 'jump') img = assets.faceJump;
+            if (bird.imageState === 'crash') img = assets.faceCrash;
+
+            ctx.drawImage(img, -bird.width / 2, -bird.height / 2, bird.width, bird.height);
+            ctx.restore();
+
+            ctx.restore();
+        }
+
+        function loop() {
+            update();
+            draw();
+            animationFrame = requestAnimationFrame(loop);
+        }
+
+
+        // INPUTS
+        const gameContainer = document.getElementById('game-container');
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                jump();
+            }
+        });
+
+        // Listen on the container so UI elements don't block the start/jump
+        gameContainer.addEventListener('mousedown', (e) => {
+            if (e.target.id === 'mute-btn' || e.target.closest('#mute-btn')) return;
+            jump();
+        });
+
+        gameContainer.addEventListener('touchstart', (e) => {
+            if (e.target.id === 'mute-btn' || e.target.closest('#mute-btn')) return;
+            e.preventDefault();
+            jump();
+        }, { passive: false });
+
+        // INITIALIZE
+        init();
+        loop();
+
+    </script>
+</body>
+
+</html>
